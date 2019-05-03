@@ -2,11 +2,15 @@ import scipy.io as sio
 from scipy import optimize
 import matplotlib.pyplot as plt
 import numpy as np
+import os, shutil
+
+
+
 
 Tl = 0.2
-TI = 1.0
-tau_v = 0.35
-tau_m = 0.1
+TI = 0.2
+tau_v = 0.3
+tau_m = 0.3
 kv =1
 km = 1
 wm = 10
@@ -56,131 +60,175 @@ for subject_id in subject_ids:
         print(np.log(subjects[subject_id][condition]['Hpe_FC']))
         print('---------------')
 
-#subject =  input('Select subject')
-#condition = input('Select condition')
-#x_axis = input('Select x axis')
-#y_axis = input('Select y axis')
+
 subject =  '1'
-condition = 'C1'
-x_axis = 'w_FC'
-y_axis = 'H_angle_v'
+condition = 'C6'
 
-visual = 'C1'
-motion = 'C4'
+f_log = np.log(subjects[subject_id][condition]['Hpe_FC'])
 
 
+w = subjects[subject][condition]['w_FC']
+
+visual_real =  subjects[subject][condition]['Hpe_FC']
+motion_real =  subjects[subject][condition]['Hpxd_FC']
+
+phase_visual =      subjects[subject][condition]['H_angle_v']
+magnitudes_visual = subjects[subject][condition]['H_magnitude_v']
+phase_motion =      subjects[subject][condition]['H_angle_d']
+magnitudes_motion = subjects[subject][condition]['H_magnitude_d']
 
 
-f_log = np.log(subjects[subject_id][visual]['Hpe_FC'])
-x_points_v = subjects[subject][visual][x_axis]
-y_points_v = subjects[subject][visual][y_axis]
-print(x_points_v)
-x_points_m = subjects[subject][motion][x_axis]
-y_points_m = subjects[subject][motion][y_axis]
-phase_visual= subjects[subject_id][visual]['H_angle_v']
-phase_motion = subjects[subject_id][motion]['H_angle_v']
-magnitudes_visual=subjects[subject_id][visual]['H_magnitude_v']
-magnitudes_motion=subjects[subject_id][motion]['H_magnitude_v']
+def get_visual_points(v_0,w):
+    return v_0[0]*(1+1j*v_0[1]*w)/(1+1j*v_0[2]*w)*np.exp(-1j*w*v_0[4])*v_0[6]**2/((1j*w)**2+2*v_0[7]*v_0[6]*1j*w+v_0[6]**2)
 
-plt.ion()
-fig, ax = plt.subplots(nrows=2, ncols=2)
-iteration=0
+def get_motion_points(v_0,w):
+    return v_0[3]*np.exp(-1j*w*v_0[5])*v_0[6]**2/((1j*w)**2+2*v_0[7]*v_0[6]*1j*w+v_0[6]**2)
+
+def shuffle_conditions(v_gen):
+    v_0 = np.zeros(len(v_gen))
+    v_0[0] = v_gen[0]
+    v_0[1] = v_gen[1] + np.random.randn()/5
+    v_0[2] = v_gen[2] + np.random.randn()/5
+    v_0[3] = v_gen[3]
+    v_0[4] = v_gen[4]
+    v_0[5] = v_gen[5]
+    v_0[6] = v_gen[6]
+    v_0[7] = v_gen[7]
+    return v_0
+
 def error(v_0):
+
     global iteration
-    iteration+=1
-    print(v_0)
-    kv = v_0[0]
-    Tl = v_0[1]
-    TI = v_0[2]
-    km = v_0[3]
-    tau_v = v_0[4]
-    tau_m = v_0[5]
-    wm = v_0[6]
-    cm = v_0[7]
+    global errors
+    global v_0_first
 
-    Fmag_v = np.absolute(kv*(1+1j*Tl*x_points_v)/(1+1j*TI*x_points_v)*np.exp(-1j*x_points_v*tau_v)*wm**2/((1j*x_points_v)**2+2*cm*wm*1j*x_points_v+wm**2))
-    Fang_v = np.transpose(np.unwrap(np.angle(np.transpose(kv*(1+1j*Tl*x_points_v)/(1+1j*TI*x_points_v)*np.exp(-1j*x_points_v*tau_v)*wm**2/((1j*x_points_v)**2+2*cm*wm*1j*x_points_v+wm**2)[0])), discont=-np.pi/2))
+    visual_modeled = get_visual_points(v_0,w)
+    motion_modeled = get_motion_points(v_0,w)
 
-    Fmag_m = np.absolute(km*np.exp(-1j*x_points_m*tau_m)*wm**2/((1j*x_points_m)**2+2*cm*wm*1j*x_points_m+wm**2))
-    Fang_m = np.transpose(np.unwrap(np.angle(np.transpose(km*np.exp(-1j*x_points_m*tau_m)*wm**2/((1j*x_points_m)**2+2*cm*wm*1j*x_points_m+wm**2)[0])), discont=-np.pi/2))
+    w_all = np.linspace(0, max(w),200)
 
-    Pmag_v = magnitudes_visual
-    Pang_v = phase_visual
-    Pmag_m = magnitudes_motion
-    Pang_m = phase_motion
+    visual_modeled_initial = get_visual_points(v_0_first,w_all)
+    motion_modeled_initial = get_motion_points(v_0_first,w_all)
 
-    error =np.sum(np.linalg.norm(Fmag_v-Pmag_v,axis=1))
-    print(error)
-
-    H_pe_magnitude = np.absolute(
-        kv * (1 + 1j * Tl * w) / (1 + 1j * TI * w) * np.exp(-1j * w * tau_v) * wm ** 2 / (
-                    (1j * w) ** 2 + 2 * cm * wm * 1j * w + wm ** 2))
-    H_pe_angle = np.unwrap(np.angle(
-        kv * (1 + 1j * Tl * w) / (1 + 1j * TI * w) * np.exp(-1j * w * tau_v) * wm ** 2 /
-        ((1j * w) ** 2 + 2 * cm * wm * 1j * w + wm ** 2)[0]).flatten(), discont=-np.pi / 2)
-
-    H_px_magnitude = np.absolute(
-        km * np.exp(-1j * w * tau_m) * wm ** 2 / (
-                (1j * w) ** 2 + 2 * cm * wm * 1j * w + wm ** 2))
-    H_px_angle = np.unwrap(np.angle(
-        km * np.exp(-1j * w * tau_m) * wm ** 2 /
-        ((1j * w) ** 2 + 2 * cm * wm * 1j * w + wm ** 2)[0]).flatten(), discont=-np.pi / 2)
-
-    ax[0][0].cla()
-    ax[0][0].semilogx(w, H_pe_angle)
-    ax[0][0].semilogx(x_points_v, phase_visual, 'rx')
-    ax[0][0].set_ylim([-10,10])
-    ax[0][0].set_xlim([0.1, max(w)])
+    visual_modeled_all = get_visual_points(v_0, w_all)
+    motion_modeled_all = get_motion_points(v_0, w_all)
 
 
-    ax[0][1].cla()
-    ax[0][1].loglog(w, H_pe_magnitude)
-    ax[0][1].loglog(x_points_v, magnitudes_visual, 'rx')
-    ax[0][1].set_ylim([0.1,10])
-    ax[0][1].set_xlim([0.1, max(w)])
-    ax[0][1].grid()
 
-    # With motion
-    ax[1][0].cla()
-    ax[1][0].semilogx(w, H_px_angle)
-    ax[1][0].semilogx(x_points_m, phase_motion, 'rx')
-    ax[1][0].set_ylim([-10, 10])
-    ax[1][0].set_xlim([0.1, max(w)])
+    error = 0
+    for i in range(len(w)):
+        error += (np.abs(visual_modeled[i]-visual_real[i])/np.abs(visual_real[i]))[0]**2
+        error += (np.abs(motion_modeled[i]-motion_real[i])/np.abs(motion_real[i]))[0]**2
+    # print(error)
+    if iteration%40 == 0:
+        fig = plt.figure(figsize=(19, 12))
 
-    ax[1][1].cla()
-    ax[1][1].loglog(w, H_px_magnitude)
-    ax[1][1].loglog(x_points_m, magnitudes_motion, 'rx')
-    ax[1][1].set_ylim([0.1, 10])
-    ax[1][1].set_xlim([0.1, max(w)])
-    ax[1][1].grid()
+        H_pe_magnitude_all = np.absolute(visual_modeled_all)
+        H_pe_angle_all = np.unwrap(np.angle(visual_modeled_all).flatten(), discont=-np.pi / 2)
+        H_px_magnitude_all = np.absolute(motion_modeled_all)
+        H_px_angle_all = np.unwrap(np.angle(motion_modeled_all).flatten(), discont=-np.pi / 2)
 
-    # # Table from Ed Smith answer
-    # clust_data = np.random.random((10, 3))
-    # collabel = ("col 1", "col 2", "col 3")
-    # ax[0][2].table(cellText=clust_data, colLabels=collabel, loc='center')
-    # # Hide axes
-    # ax[0][2].xaxis.set_visible(False)
-    # ax[0][2].yaxis.set_visible(False)
-    fig.suptitle('#Iteration: '+ str(iteration), fontsize=20)
+        H_pe_magnitude_initial = np.absolute(visual_modeled_initial)
+        H_pe_angle_initial = np.unwrap(np.angle(visual_modeled_initial).flatten(), discont=-np.pi / 2)
 
-    fig.savefig('Folded/temp.png', dpi=fig.dpi)
-    # plt.pause(0.001)
-    # plt.show()
-    #
+        H_px_magnitude_initial = np.absolute(motion_modeled_initial)
+        H_px_angle_initial = np.unwrap(np.angle(motion_modeled_initial).flatten(), discont=-np.pi / 2)
 
+
+        ax1 = plt.subplot2grid((2, 3), (0, 0))
+        ax2 = plt.subplot2grid((2, 3), (1, 0))
+        ax3 = plt.subplot2grid((2, 3), (0, 1))
+        ax4 = plt.subplot2grid((2, 3), (1, 1))
+        ax5 = plt.subplot2grid((2, 3), (0, 2), rowspan=2)
+        ax5.axis('off')
+        params = np.array(['kv','TI', 'TL', 'km', 'tau_v', 'tau_m', 'wm', 'cm'])
+        initial = np.around(v_0_first,4)
+        current = np.around(v_0,4)
+
+
+        clust_data = np.transpose(np.array([params, initial, current]))
+        collabel = ("Param", "Initial", "Current")
+        table = ax5.table(cellText=clust_data, colLabels=collabel, loc='center', fontsize=20)
+        table.scale(1, 4)
+
+        table.auto_set_font_size(False)
+        table.set_fontsize(14)
+
+        ax1.cla()
+        ax1.semilogx(w_all, H_pe_angle_all)
+        ax1.semilogx(w_all, H_pe_angle_initial)
+        ax1.semilogx(w, phase_visual, 'rx')
+        ax1.set_ylim([-10,10])
+        ax1.set_xlim([0, max(w)])
+
+
+        ax2.cla()
+        ax2.loglog(w_all, H_pe_magnitude_all)
+        ax2.loglog(w_all, H_pe_magnitude_initial)
+        ax2.loglog(w, magnitudes_visual, 'rx')
+        ax2.set_ylim([0,10])
+        ax2.set_xlim([0, max(w)])
+        ax2.grid()
+
+        # With motion
+        ax3.cla()
+        ax3.semilogx(w_all, H_px_angle_all)
+        ax3.semilogx(w_all, H_px_angle_initial)
+        ax3.semilogx(w, phase_motion, 'rx')
+        ax3.set_ylim([-10, 10])
+        ax3.set_xlim([0, max(w)])
+
+        ax4.cla()
+        ax4.loglog(w_all, H_px_magnitude_all)
+        ax4.loglog(w_all, H_px_magnitude_initial)
+        ax4.loglog(w, magnitudes_motion, 'rx')
+        ax4.set_ylim([0, 10])
+        ax4.set_xlim([0, max(w)])
+        ax4.grid()
+
+        fig.suptitle('#Iteration: '+ str(iteration), fontsize=20)
+        mng = plt.get_current_fig_manager()
+
+        fig.savefig(str(condition)+'/'+str(K)+'/iteration'+str(iteration)+'.png')
+        if iteration ==0:
+            print('plotting')
+        # plt.pause(0.001)
+        # plt.show()
+        #
+    iteration += 1
+    errors.append(error)
+    # print(error[0],iteration)
     return error
 v_0 = np.array([kv,Tl,TI,km,tau_v, tau_m,wm,cm])
-v_0 = optimize.fmin(error,v_0)
+v_generator = v_0
 
-H_pe_magnitude = np.absolute(v_0[0]*(1+1j*v_0[1]*w)/(1+1j*v_0[2]*w)*np.exp(-1j*w*v_0[3])*v_0[4]**2/((1j*w)**2+2*v_0[5]*v_0[4]*1j*w+v_0[4]**2))
-H_pe_angle      =np.unwrap(np.angle(v_0[0]*(1+1j*v_0[1]*w)/(1+1j*v_0[2]*w)*np.exp(-1j*w*v_0[3])*v_0[4]**2/((1j*w)**2+2*v_0[5]*v_0[4]*1j*w+v_0[4]**2)[0]).flatten(), discont=-np.pi/2)
+path = str(condition)
+
+for the_file in os.listdir(path):
+    file_path = os.path.join(path, the_file)
+    try:
+        if os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+        print(file_path)
+    except Exception as e:
+        print(e)
+
+min_errors = []
+for K in range(0,30):
+    iteration = 0
+    errors = []
+    folder = str(condition)+'/'+str(K)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    v_0_first = shuffle_conditions(v_generator)
+
+    v_0 = optimize.fmin(error,v_0_first)
+    min_error = np.min(np.array(errors))
+    min_errors.append(min_error)
+    print(np.argmin(np.array(min_errors)), K, min_error, np.min(np.array(min_errors)))
 
 
 
-plt.show()
-y =np.absolute(v_0[0]*(1+1j*v_0[1]*w)/(1+1j*v_0[2]*w)*np.exp(-1j*w*v_0[3])*v_0[4]**2/((1j*w)**2+2*v_0[5]*v_0[4]*1j*w+v_0[4]**2))
-plt.semilogx(w,y)
 
-plt.show()
 
 
