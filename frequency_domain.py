@@ -5,13 +5,11 @@ import numpy as np
 import os, shutil
 
 
-
-
 Tl = 0.2
 TI = 0.2
 tau_v = 0.3
 tau_m = 0.3
-kv =1
+kv = 1
 km = 1
 wm = 10
 cm = 0.25
@@ -20,6 +18,8 @@ y = np.absolute(kv*(1+1j*Tl*w)/(1+1j*TI*w)*np.exp(-1j*w*tau_v)*wm**2/((1j*w)**2+
 plt.plot(w, y)
 plt.show()
 
+TLs = np.linspace(0.1,1,5)
+TIs = np.linspace(0.1,1,5)
 
 
 def H(kv,Tl,TI,tau, wm, cm,w):
@@ -30,8 +30,6 @@ conditions = ['C1','C2','C3','C4','C5','C6']
 subject_ids = ['1','2','3','4','5','6',]
 
 subjects = {}
-
-
 
 for subject_id in subject_ids:
     subjects[subject_id] = {}
@@ -61,7 +59,7 @@ for subject_id in subject_ids:
         print('---------------')
 
 
-subject =  '1'
+subject =  '2'
 condition = 'C6'
 
 f_log = np.log(subjects[subject_id][condition]['Hpe_FC'])
@@ -84,23 +82,13 @@ def get_visual_points(v_0,w):
 def get_motion_points(v_0,w):
     return v_0[3]*np.exp(-1j*w*v_0[5])*v_0[6]**2/((1j*w)**2+2*v_0[7]*v_0[6]*1j*w+v_0[6]**2)
 
-def shuffle_conditions(v_gen):
-    v_0 = np.zeros(len(v_gen))
-    v_0[0] = v_gen[0]
-    v_0[1] = v_gen[1] + np.random.randn()/5
-    v_0[2] = v_gen[2] + np.random.randn()/5
-    v_0[3] = v_gen[3]
-    v_0[4] = v_gen[4]
-    v_0[5] = v_gen[5]
-    v_0[6] = v_gen[6]
-    v_0[7] = v_gen[7]
-    return v_0
-
 def error(v_0):
 
     global iteration
     global errors
     global v_0_first
+
+
 
     visual_modeled = get_visual_points(v_0,w)
     motion_modeled = get_motion_points(v_0,w)
@@ -114,13 +102,13 @@ def error(v_0):
     motion_modeled_all = get_motion_points(v_0, w_all)
 
 
-
-    error = 0
-    for i in range(len(w)):
-        error += (np.abs(visual_modeled[i]-visual_real[i])/np.abs(visual_real[i]))[0]**2
-        error += (np.abs(motion_modeled[i]-motion_real[i])/np.abs(motion_real[i]))[0]**2
-    # print(error)
-    if iteration%40 == 0:
+    error_v = 0
+    error_m = 0
+    for i in range(2,len(w)):
+        error_v += (np.abs(visual_modeled[i]-visual_real[i])/np.abs(visual_real[i]))[0]**2
+        error_m += (np.abs(motion_modeled[i]-motion_real[i])/np.abs(motion_real[i]))[0]**2
+    error = error_v + error_m
+    if iteration%400 == 0:
         fig = plt.figure(figsize=(19, 12))
 
         H_pe_magnitude_all = np.absolute(visual_modeled_all)
@@ -130,7 +118,6 @@ def error(v_0):
 
         H_pe_magnitude_initial = np.absolute(visual_modeled_initial)
         H_pe_angle_initial = np.unwrap(np.angle(visual_modeled_initial).flatten(), discont=-np.pi / 2)
-
         H_px_magnitude_initial = np.absolute(motion_modeled_initial)
         H_px_angle_initial = np.unwrap(np.angle(motion_modeled_initial).flatten(), discont=-np.pi / 2)
 
@@ -141,7 +128,7 @@ def error(v_0):
         ax4 = plt.subplot2grid((2, 3), (1, 1))
         ax5 = plt.subplot2grid((2, 3), (0, 2), rowspan=2)
         ax5.axis('off')
-        params = np.array(['kv','TI', 'TL', 'km', 'tau_v', 'tau_m', 'wm', 'cm'])
+        params = np.array(['kv','TL', 'TI', 'km', 'tau_v', 'tau_m', 'wm', 'cm'])
         initial = np.around(v_0_first,4)
         current = np.around(v_0,4)
 
@@ -160,7 +147,7 @@ def error(v_0):
         ax1.semilogx(w, phase_visual, 'rx')
         ax1.set_ylim([-10,10])
         ax1.set_xlim([0, max(w)])
-
+        ax1.grid(True, which="both")
 
         ax2.cla()
         ax2.loglog(w_all, H_pe_magnitude_all)
@@ -168,7 +155,7 @@ def error(v_0):
         ax2.loglog(w, magnitudes_visual, 'rx')
         ax2.set_ylim([0,10])
         ax2.set_xlim([0, max(w)])
-        ax2.grid()
+        ax2.grid(True, which="both")
 
         # With motion
         ax3.cla()
@@ -177,6 +164,7 @@ def error(v_0):
         ax3.semilogx(w, phase_motion, 'rx')
         ax3.set_ylim([-10, 10])
         ax3.set_xlim([0, max(w)])
+        ax3.grid(True, which="both")
 
         ax4.cla()
         ax4.loglog(w_all, H_px_magnitude_all)
@@ -184,23 +172,22 @@ def error(v_0):
         ax4.loglog(w, magnitudes_motion, 'rx')
         ax4.set_ylim([0, 10])
         ax4.set_xlim([0, max(w)])
-        ax4.grid()
+        ax4.set_xlabel('common xlabel')
+        ax4.set_ylabel('common ylabel')
+        ax4.grid(True, which="both")
 
-        fig.suptitle('#Iteration: '+ str(iteration), fontsize=20)
-        mng = plt.get_current_fig_manager()
+        fig.suptitle('#Iteration: '+ str(iteration) + ' J = '+ str(error) + '    V: '+ str(error_v) + '   M: ' + str(error_m), fontsize=20)
 
         fig.savefig(str(condition)+'/'+str(K)+'/iteration'+str(iteration)+'.png')
         if iteration ==0:
             print('plotting')
-        # plt.pause(0.001)
-        # plt.show()
-        #
+
     iteration += 1
     errors.append(error)
     # print(error[0],iteration)
     return error
 v_0 = np.array([kv,Tl,TI,km,tau_v, tau_m,wm,cm])
-v_generator = v_0
+v_0_first = v_0
 
 path = str(condition)
 
@@ -214,18 +201,22 @@ for the_file in os.listdir(path):
         print(e)
 
 min_errors = []
-for K in range(0,30):
-    iteration = 0
-    errors = []
-    folder = str(condition)+'/'+str(K)
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    v_0_first = shuffle_conditions(v_generator)
+K=0
+for TI in TIs:
+    for TL in TLs:
+        iteration = 0
+        errors = []
+        folder = str(condition)+'/'+str(K)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        v_0_first[1] = TL
+        v_0_first[2] = TI
+        v_0 = optimize.fmin(error,v_0_first)
+        min_error = np.min(np.array(errors))
+        min_errors.append(min_error)
+        print(np.argmin(np.array(min_errors)), K, min_error, np.min(np.array(min_errors)), v_0_first)
+        K+=1
 
-    v_0 = optimize.fmin(error,v_0_first)
-    min_error = np.min(np.array(errors))
-    min_errors.append(min_error)
-    print(np.argmin(np.array(min_errors)), K, min_error, np.min(np.array(min_errors)))
 
 
 
