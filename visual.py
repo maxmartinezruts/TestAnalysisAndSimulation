@@ -18,6 +18,8 @@ w = np.linspace(0,20, 100)
 y = np.absolute(kv*(1+1j*Tl*w)/(1+1j*TI*w)*np.exp(-1j*w*tau_v)*wm**2/((1j*w)**2+2*cm*wm*1j*w+wm**2))
 plt.plot(w, y)
 plt.show()
+import csv
+
 
 TLs = np.linspace(0.1,1,3)
 TIs = np.linspace(0.1,1,3)
@@ -25,6 +27,84 @@ TIs = np.linspace(0.1,1,3)
 
 def H(kv,Tl,TI,tau, wm, cm,w):
     return kv*(1+1j*Tl)/(1+1j*TI)*np.exp(-1j*w*tau)*wm**2/((1j*w)**2+2*cm*wm*1j*w+wm**2)
+
+
+def get_visual_points(v_0,w):
+    return v_0[0]*(1+1j*v_0[1]*w)/(1+1j*v_0[2]*w)*np.exp(-1j*w*v_0[3])*v_0[4]**2/((1j*w)**2+2*v_0[5]*v_0[4]*1j*w+v_0[4]**2)
+def bode_plot(v_0, v_0_first):
+    print(v_0_first)
+    global error_v
+    w_all = np.linspace(0, max(w), 200)
+
+    visual_modeled_initial = get_visual_points(v_0_first, w_all)
+
+    visual_modeled_all = get_visual_points(v_0, w_all)
+
+    fig = plt.figure(figsize=(19, 12))
+
+    H_pe_magnitude_all = np.absolute(visual_modeled_all)
+    H_pe_angle_all = np.unwrap(np.angle(visual_modeled_all).flatten(), discont=-np.pi / 2)
+
+    H_pe_magnitude_initial = np.absolute(visual_modeled_initial)
+    H_pe_angle_initial = np.unwrap(np.angle(visual_modeled_initial).flatten(), discont=-np.pi / 2)
+
+    ax1 = plt.subplot2grid((2, 2), (0, 0))
+    ax2 = plt.subplot2grid((2, 2), (1, 0))
+    ax5 = plt.subplot2grid((2, 2), (0, 1), rowspan=2)
+    ax5.axis('off')
+
+    params = np.array(['kv', 'TL', 'TI', 'tau_v', 'wm', 'cm'])
+    initial = np.around(v_0_first, 4)
+    current = np.around(v_0, 4)
+
+    clust_data = np.transpose(np.array([params, initial, current]))
+    collabel = ("Param", "Initial", "Current")
+    table = ax5.table(cellText=clust_data, colLabels=collabel, loc='center', fontsize=20)
+    table.scale(1, 4)
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(14)
+
+    ax1.cla()
+    ax1.semilogx(w_all, H_pe_angle_all)
+    ax1.semilogx(w_all, H_pe_angle_initial)
+    ax1.semilogx(w, phase_visual, 'rx')
+    ax1.set_ylim([-10, 10])
+    ax1.set_xlim([0, max(w)])
+    ax1.grid(True, which="both")
+
+    ax2.cla()
+    ax2.loglog(w_all, H_pe_magnitude_all)
+    ax2.loglog(w_all, H_pe_magnitude_initial)
+    ax2.loglog(w, magnitudes_visual, 'rx')
+    ax2.set_ylim([0, 10])
+    ax2.set_xlim([0, max(w)])
+    ax2.grid(True, which="both")
+
+    fig.suptitle('#Iteration: ' + str(iteration) + ' J = ' + str(error_v) + '    V: ' + str(error_v), fontsize=20)
+
+    fig.savefig(str(condition) + '_v/subject_' + str(subject)  + '.png')
+
+
+
+def error(v_0):
+    global iteration
+    global errors
+    global v_0_first
+    global error_v
+
+    visual_modeled = get_visual_points(v_0,w)
+
+    error_v = 0
+    for i in range(0,len(w)):
+        error_v += (np.abs(visual_modeled[i]-visual_real[i])/np.abs(visual_real[i]))[0]**2
+    error = error_v
+
+
+    iteration += 1
+    errors.append(error)
+    # print(error[0],iteration)
+    return error
 
 
 conditions = ['C1','C2','C3','C4','C5','C6']
@@ -54,21 +134,26 @@ for subject_id in subject_ids:
         subjects[subject_id][condition]['H_angle_d'] = np.transpose(np.unwrap(np.transpose(np.angle(subjects[subject_id][condition]['Hpxd_FC'][:, :])),discont=-np.pi))
 
 
-
-
         print(np.log(subjects[subject_id][condition]['Hpe_FC']))
         print('---------------')
+kv_anova_visual = [['subj_id','magnitude','vehicle','motion']]
+TL_anova_visual = [['subj_id','magnitude','vehicle','motion']]
+TI_anova_visual = [['subj_id','magnitude','vehicle','motion']]
+tau_v_anova_visual = [['subj_id','magnitude','vehicle','motion']]
+wm_anova_visual = [['subj_id','magnitude','vehicle','motion']]
+cm_anova_visual = [['subj_id','magnitude','vehicle','motion']]
 
-for s_number in range(6,7):
-    for c_number in range(3,7):
-        s_number = 3
-        c_number=3
+
+
+
+for c_number in range(1,7):
+    for s_number in range(1, 7):
+
         subject =  str(s_number)
 
         condition = 'C' + str(c_number)
 
-        f_log = np.log(subjects[subject_id][condition]['Hpe_FC'])
-
+        f_log = np.log(subjects[subject][condition]['Hpe_FC'])
 
         w = subjects[subject][condition]['w_FC']
 
@@ -83,96 +168,21 @@ for s_number in range(6,7):
         params = np.array(['kv', 'TL', 'TI', 'tau_v', 'wm', 'cm'])
 
 
-        def get_visual_points(v_0,w):
-            return v_0[0]*(1+1j*v_0[1]*w)/(1+1j*v_0[2]*w)*np.exp(-1j*w*v_0[3])*v_0[4]**2/((1j*w)**2+2*v_0[5]*v_0[4]*1j*w+v_0[4]**2)
-
-        def error(v_0):
-            global iteration
-            global errors
-            global v_0_first
-
-            visual_modeled = get_visual_points(v_0,w)
-
-            w_all = np.linspace(0, max(w),200)
-
-            visual_modeled_initial = get_visual_points(v_0_first,w_all)
-
-            visual_modeled_all = get_visual_points(v_0, w_all)
-
-
-            error_v = 0
-            for i in range(0,len(w)):
-                error_v += (np.abs(visual_modeled[i]-visual_real[i])/np.abs(visual_real[i]))[0]**2
-            error = error_v
-
-            if iteration%4000 == 0:
-                fig = plt.figure(figsize=(19, 12))
-
-                H_pe_magnitude_all = np.absolute(visual_modeled_all)
-                H_pe_angle_all = np.unwrap(np.angle(visual_modeled_all).flatten(), discont=-np.pi / 2)
-
-                H_pe_magnitude_initial = np.absolute(visual_modeled_initial)
-                H_pe_angle_initial = np.unwrap(np.angle(visual_modeled_initial).flatten(), discont=-np.pi / 2)
-
-
-                ax1 = plt.subplot2grid((2, 2), (0, 0))
-                ax2 = plt.subplot2grid((2, 2), (1, 0))
-                ax5 = plt.subplot2grid((2, 2), (0, 1), rowspan=2)
-                ax5.axis('off')
-
-                params = np.array(['kv','TL', 'TI', 'tau_v', 'wm', 'cm'])
-                initial = np.around(v_0_first,4)
-                current = np.around(v_0,4)
-
-                clust_data = np.transpose(np.array([params, initial, current]))
-                collabel = ("Param", "Initial", "Current")
-                table = ax5.table(cellText=clust_data, colLabels=collabel, loc='center', fontsize=20)
-                table.scale(1, 4)
-
-                table.auto_set_font_size(False)
-                table.set_fontsize(14)
-
-                ax1.cla()
-                ax1.semilogx(w_all, H_pe_angle_all)
-                ax1.semilogx(w_all, H_pe_angle_initial)
-                ax1.semilogx(w, phase_visual, 'rx')
-                ax1.set_ylim([-10,10])
-                ax1.set_xlim([0, max(w)])
-                ax1.grid(True, which="both")
-
-                ax2.cla()
-                ax2.loglog(w_all, H_pe_magnitude_all)
-                ax2.loglog(w_all, H_pe_magnitude_initial)
-                ax2.loglog(w, magnitudes_visual, 'rx')
-                ax2.set_ylim([0,10])
-                ax2.set_xlim([0, max(w)])
-                ax2.grid(True, which="both")
-
-
-
-                fig.suptitle('#Iteration: '+ str(iteration) + ' J = '+ str(error) + '    V: '+ str(error_v) , fontsize=20)
-
-                fig.savefig(str(condition)+'/'+str(K)+'/iteration'+str(iteration)+'.png')
-                if iteration ==0:
-                    print('plotting')
-
-            iteration += 1
-            errors.append(error)
-            # print(error[0],iteration)
-            return error
         v_0 = np.array([kv,Tl,TI,tau_v,wm,cm])
         v_0_first = v_0
 
-        path = str(condition)
-
-        for the_file in os.listdir(path):
-            file_path = os.path.join(path, the_file)
-            try:
-                if os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-                print(file_path)
-            except Exception as e:
-                print(e)
+        # path = str(condition) + '_v'
+        #
+        # for the_file in os.listdir(path):
+        #     file_path = os.path.join(path, the_file)
+        #     try:
+        #         if os.path.isfile(file_path):
+        #             os.unlink(file_path)
+        #         if os.path.isdir(file_path):
+        #             shutil.rmtree(file_path)
+        #         print(file_path)
+        #     except Exception as e:
+        #         print(e)
 
         min_errors = []
         K=0
@@ -180,7 +190,7 @@ for s_number in range(6,7):
             for TL in TLs:
                 iteration = 0
                 errors = []
-                folder = str(condition)+'/'+str(K)
+                folder = str(condition)+'_v'
                 if not os.path.exists(folder):
                     os.makedirs(folder)
                 v_0_first[1] = TL
@@ -189,43 +199,46 @@ for s_number in range(6,7):
                 min_error = np.min(np.array(errors))
                 min_errors.append(min_error)
                 print(np.argmin(np.array(min_errors)), K, min_error, np.min(np.array(min_errors)), v_0)
-                if np.argmin(np.array(min_errors))==K:
+                if np.argmin(np.array(min_errors)) == K:
+                    # bode_plot(v_0, v_0_first)
 
-                    kv_read = numpy.genfromtxt('visual_kv.csv', delimiter=',')
-                    TL_read = numpy.genfromtxt('visual_TL.csv', delimiter=',')
-                    TI_read = numpy.genfromtxt('visual_TI.csv', delimiter=',')
-                    tau_v_read = numpy.genfromtxt('visual_tau_v.csv', delimiter=',')
-                    wm_read = numpy.genfromtxt('visual_wm.csv', delimiter=',')
-                    cm_read = numpy.genfromtxt('visual_cm.csv', delimiter=',')
+                    kv_best =[subject, v_0[0], (c_number - 1)%3,  int((c_number-1)/3)]
+                    TL_best =[subject, v_0[1], (c_number - 1)%3,  int((c_number-1)/3)]
+                    TI_best =[subject, v_0[2], (c_number - 1)%3,  int((c_number-1)/3)]
+                    tau_v_best =[subject, v_0[3], (c_number - 1)%3,  int((c_number-1)/3)]
+                    wm_best =[subject, v_0[4], (c_number - 1)%3,  int((c_number-1)/3)]
+                    cm_best =[subject, v_0[5], (c_number - 1)%3,  int((c_number-1)/3)]
 
-                    kv_read[s_number-1,c_number-1] = v_0[0]
-                    TL_read[s_number-1,c_number-1] = v_0[1]
-                    TI_read[s_number-1,c_number-1] = v_0[2]
-                    tau_v_read[s_number-1,c_number-1] = v_0[3]
-                    wm_read[s_number-1,c_number-1] = v_0[4]
-                    cm_read[s_number-1,c_number-1] = v_0[5]
-                    # kv_read = np.zeros((6,6))
-                    # TL_read = np.zeros((6,6))
-                    # TI_read = np.zeros((6,6))
-                    # tau_v_read = np.zeros((6,6))
-                    # wm_read = np.zeros((6,6))
-                    # cm_read = np.zeros((6,6))
-                    #
-
-
-                    numpy.savetxt("visual_kv.csv",numpy.asarray(kv_read), delimiter=",")
-                    numpy.savetxt("visual_TL.csv",numpy.asarray(TL_read), delimiter=",")
-                    numpy.savetxt("visual_TI.csv",numpy.asarray(TI_read), delimiter=",")
-                    numpy.savetxt("visual_tau_v.csv",numpy.asarray(tau_v_read), delimiter=",")
-                    numpy.savetxt("visual_wm.csv",numpy.asarray(wm_read), delimiter=",")
-                    numpy.savetxt("visual_cm.csv",numpy.asarray(cm_read), delimiter=",")
 
 
                 K+=1
+        kv_anova_visual.append(kv_best)
+        TL_anova_visual.append(TL_best)
+        TI_anova_visual.append(TI_best)
+        tau_v_anova_visual.append(tau_v_best)
+        wm_anova_visual.append(wm_best)
+        cm_anova_visual.append(cm_best)
 
 
+print(kv_anova_visual)
+with open('visual_anova_kv.csv', 'w') as csvFile:
+    writer = csv.writer(csvFile)
+    writer.writerows(kv_anova_visual)
+with open('visual_anova_TL.csv', 'w') as csvFile:
+    writer = csv.writer(csvFile)
+    writer.writerows(TL_anova_visual)
+with open('visual_anova_TI.csv', 'w') as csvFile:
+    writer = csv.writer(csvFile)
+    writer.writerows(TI_anova_visual)
+with open('visual_anova_tau_v.csv', 'w') as csvFile:
+    writer = csv.writer(csvFile)
+    writer.writerows(tau_v_anova_visual)
+with open('visual_anova_wm.csv', 'w') as csvFile:
+    writer = csv.writer(csvFile)
+    writer.writerows(wm_anova_visual)
+with open('visual_anova_cm.csv', 'w') as csvFile:
+    writer = csv.writer(csvFile)
+    writer.writerows(cm_anova_visual)
 
-
-
-
+csvFile.close()
 
